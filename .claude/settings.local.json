@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir)",
+      "Bash(mkdir:*)",
+      "Bash(npm install:*)",
+      "Bash(python:*)",
+      "Bash(.gradlew.bat app:compileDebugKotlin:*)",
+      "Bash(./gradlew.bat:*)",
+      "Bash(npx expo prebuild:*)",
+      "Bash($ANDROID_HOME/platform-tools/adb install:*)"
+    ],
+    "deny": []
+  }
+}
