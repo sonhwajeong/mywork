@@ -8,7 +8,18 @@
       "Bash(.gradlew.bat app:compileDebugKotlin:*)",
       "Bash(./gradlew.bat:*)",
       "Bash(npx expo prebuild:*)",
-      "Bash($ANDROID_HOME/platform-tools/adb install:*)"
+      "Bash($ANDROID_HOME/platform-tools/adb install:*)",
+      "Bash(npm run reset-project:*)",
+      "Bash(npx expo install:*)",
+      "Bash(npx expo run:android:*)",
+      "Bash(npx expo export:*)",
+      "Bash(timeout 30s npx expo start --clear)",
+      "Bash(del \"D:\\Sources\\mywork\\test2\\android\\app\\src\\main\\java\\com\\yourcompany\\test2\\BiometricEnrollModule.kt\")",
+      "Bash(npx tsc:*)",
+      "Bash(npm start)",
+      "Bash(npm run lint)",
+      "Bash(npx expo start:*)",
+      "Bash(move AppWebView.tsx AppWebView_old.tsx)"
     ],
     "deny": []
   }

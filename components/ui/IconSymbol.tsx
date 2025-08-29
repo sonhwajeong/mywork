@@ -9,6 +9,7 @@ import { OpaqueColorValue, StyleProp, TextStyle } from 'react-native';
 const MAPPING = {
   'house.fill': 'home',
   'paperplane.fill': 'send',
+  'person.fill': 'person',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
 } as Partial<
