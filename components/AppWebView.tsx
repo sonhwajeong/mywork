@@ -21,6 +21,63 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
   const [messageQueue, setMessageQueue] = useState<any[]>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
+  // === 공통 유틸리티: 웹으로 메시지 주입 ===
+  const sendToWeb = (message: any, options?: { callback?: string; eventName?: string }) => {
+    const { callback, eventName } = options || {};
+    const js = `
+      (function(){
+        if (typeof window.handleRNMessage === 'function') {
+          window.handleRNMessage(${JSON.stringify(message)});
+        }
+        window.postMessage(${JSON.stringify(message)}, '*');
+        ${callback ? `if (window.${callback}) { window.${callback}(${JSON.stringify(message)}); }` : ''}
+        ${eventName ? `if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('${eventName}', { detail: ${JSON.stringify(message)} })); }` : ''}
+        true;
+      })();
+    `;
+    webViewRef.current?.injectJavaScript(js);
+  };
+
+  // === 공통 유틸리티: 진행/오류 메시지 빌더 ===
+  const buildProgress = (kind: 'pin' | 'biometric', message: string) => ({
+    type: `${kind}LoginProgress`,
+    success: true,
+    message
+  });
+
+  const buildError = (kind: 'pin' | 'biometric', message: string) => ({
+    type: `${kind}LoginError`,
+    success: false,
+    error: message
+  });
+
+  // === 공통 유틸리티: 디바이스 옵션 확인(hasPin/hasPasskey) ===
+  const ensureOptionEnabled = async (kind: 'pin' | 'biometric'): Promise<boolean> => {
+    try {
+      const deviceInfo = await getDeviceInfo();
+      const loginOptions = await fetchLoginOptionsWithDeviceId(deviceInfo.deviceId);
+
+      const enabled = kind === 'pin' ? !!loginOptions?.hasPin : !!loginOptions?.hasPasskey;
+      if (!enabled) {
+        const title = kind === 'pin' ? 'PIN 설정 필요' : '생체인증 설정 필요';
+        const msg = kind === 'pin'
+          ? 'PIN이 설정되지 않았습니다.\n먼저 일반 로그인 후 마이페이지에서 PIN을 설정해주세요.'
+          : '생체인증이 설정되지 않았습니다.\n마이페이지에서 생체인증을 먼저 설정해주세요.';
+        Alert.alert(title, msg, [{ text: '확인' }]);
+
+        const errorResponse = buildError(kind, msg);
+        const callback = kind === 'pin' ? 'handlePinLoginResult' : 'handleBiometricResult';
+        sendToWeb(errorResponse, { callback });
+        return false;
+      }
+      return true;
+    } catch (optionsError) {
+      // 옵션 확인 실패 시에도 시도를 계속함(서버에서 최종 판단)
+      console.warn(`${kind.toUpperCase()} login options check failed, proceeding:`, optionsError);
+      return true;
+    }
+  };
+
   // 설정 완료 핸들러 등록 (PIN, 생체인증 등) + WebView 매니저 등록
   useEffect(() => {
     (global as any).webViewHandleSettingComplete = (result: any) => {
@@ -47,8 +104,8 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
 
   // WebView 매니저에 등록/해제 (컴포넌트 언마운트 시에만)
   useEffect(() => {
+    const webView = webViewRef.current;
     return () => {
-      const webView = webViewRef.current;
       if (webView) {
         console.log('📝 WebView 매니저에서 해제');
         webViewManager.unregisterWebView(webView);
@@ -90,26 +147,7 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
         }
       };
 
-      const jsCode = `
-        // handleRNMessage 함수가 있으면 직접 호출
-        if (typeof window.handleRNMessage === 'function') {
-          window.handleRNMessage(${JSON.stringify(response)});
-        }
-        
-        // window.postMessage로도 이벤트 발생
-        window.postMessage(${JSON.stringify(response)}, '*');
-        
-        if (window.handleDeviceInfoResult) { 
-          window.handleDeviceInfoResult(${JSON.stringify(response)}); 
-        }
-        if (window.dispatchEvent) { 
-          window.dispatchEvent(new CustomEvent('deviceInfo', { 
-            detail: ${JSON.stringify(response)} 
-          })); 
-        }
-        true;
-      `;
-      webViewRef.current?.injectJavaScript(jsCode);
+      sendToWeb(response, { callback: 'handleDeviceInfoResult', eventName: 'deviceInfo' });
     } catch (error) {
       console.error('❌ 디바이스 정보 수집 실패:', error);
 
@@ -127,21 +165,7 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
         error: '디바이스 정보를 가져올 수 없습니다.'
       };
 
-      const errorJsCode = `
-        // handleRNMessage 함수가 있으면 직접 호출
-        if (typeof window.handleRNMessage === 'function') {
-          window.handleRNMessage(${JSON.stringify(errorResponse)});
-        }
-        
-        // window.postMessage로도 이벤트 발생
-        window.postMessage(${JSON.stringify(errorResponse)}, '*');
-        
-        if (window.handleDeviceInfoResult) { 
-          window.handleDeviceInfoResult(${JSON.stringify(errorResponse)}); 
-        }
-        true;
-      `;
-      webViewRef.current?.injectJavaScript(errorJsCode);
+      sendToWeb(errorResponse, { callback: 'handleDeviceInfoResult' });
     }
   };
 
@@ -150,102 +174,22 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
     
     try {
       // 즉시 "진행 중" 응답을 웹에 전송하여 로딩 상태 해제
-      const progressResponse = {
-        type: 'pinLoginProgress',
-        success: true,
-        message: 'PIN 입력 화면으로 이동 중...'
-      };
-      
-      const immediateJsCode = `
-        // handleRNMessage 함수가 있으면 직접 호출
-        if (typeof window.handleRNMessage === 'function') {
-          window.handleRNMessage(${JSON.stringify(progressResponse)});
-        }
-        
-        // window.postMessage로도 이벤트 발생
-        window.postMessage(${JSON.stringify(progressResponse)}, '*');
-        
-        if (window.handlePinLoginProgress) { 
-          window.handlePinLoginProgress(${JSON.stringify(progressResponse)}); 
-        }
-        if (window.dispatchEvent) { 
-          window.dispatchEvent(new CustomEvent('pinLoginProgress', { 
-            detail: ${JSON.stringify(progressResponse)} 
-          })); 
-        }
-        true;
-      `;
-      webViewRef.current?.injectJavaScript(immediateJsCode);
+      const progressResponse = buildProgress('pin', 'PIN 입력 화면으로 이동 중...');
+      sendToWeb(progressResponse, { callback: 'handlePinLoginProgress', eventName: 'pinLoginProgress' });
       
       // 1. 현재 로그인된 사용자 정보 확인
       const currentUserEmail = await getLastEmail();
 
       if (!currentUserEmail) {
         // 에러: 로그인된 사용자 없음
-        const errorResponse = {
-          type: 'pinLoginError',
-          success: false,
-          error: '저장된 사용자 정보가 없습니다.\n먼저 일반 로그인을 해주세요.'
-        };
-        
-        const errorJsCode = `
-          // handleRNMessage 함수가 있으면 직접 호출
-          if (typeof window.handleRNMessage === 'function') {
-            window.handleRNMessage(${JSON.stringify(errorResponse)});
-          }
-          
-          // window.postMessage로도 이벤트 발생
-          window.postMessage(${JSON.stringify(errorResponse)}, '*');
-          
-          if (window.handlePinLoginResult) { 
-            window.handlePinLoginResult(${JSON.stringify(errorResponse)}); 
-          }
-          true;
-        `;
-        webViewRef.current?.injectJavaScript(errorJsCode);
+        const errorResponse = buildError('pin', '저장된 사용자 정보가 없습니다.\n먼저 일반 로그인을 해주세요.');
+        sendToWeb(errorResponse, { callback: 'handlePinLoginResult' });
         return;
       }
 
       // 2. 서버에서 PIN 설정 확인 (디바이스 기반)
-      try {
-        const deviceInfo = await getDeviceInfo();
-        const loginOptions = await fetchLoginOptionsWithDeviceId(deviceInfo.deviceId);
-        
-        if (!loginOptions?.hasPin) {
-          // 에러: PIN 설정 안됨 - 알림 표시
-          Alert.alert(
-            'PIN 설정 필요',
-            'PIN이 설정되지 않았습니다.\n먼저 일반 로그인 후 마이페이지에서 PIN을 설정해주세요.',
-            [{ text: '확인' }]
-          );
-          
-          const errorResponse = {
-            type: 'pinLoginError',  
-            success: false,
-            error: 'PIN이 설정되지 않았습니다.\n먼저 일반 로그인 후 마이페이지에서 PIN을 설정해주세요.'
-          };
-          
-          const errorJsCode = `
-            // handleRNMessage 함수가 있으면 직접 호출
-            if (typeof window.handleRNMessage === 'function') {
-              window.handleRNMessage(${JSON.stringify(errorResponse)});
-            }
-            
-            // window.postMessage로도 이벤트 발생
-            window.postMessage(${JSON.stringify(errorResponse)}, '*');
-            
-            if (window.handlePinLoginResult) { 
-              window.handlePinLoginResult(${JSON.stringify(errorResponse)}); 
-            }
-            true;
-          `;
-          webViewRef.current?.injectJavaScript(errorJsCode);
-          return;
-        }
-      } catch (optionsError) {
-        // 로그인 옵션 확인 실패 시에도 PIN 로그인 시도 (서버에서 판단)
-        console.warn('PIN login options check failed, proceeding with PIN login:', optionsError);
-      }
+      const pinEnabled = await ensureOptionEnabled('pin');
+      if (!pinEnabled) return;
 
       // 3. PIN 설정 확인됨 -> PIN unlock 화면으로 이동
       // WebView 요청임을 알리는 메시지 설정
@@ -278,26 +222,9 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
         
         console.log('🚀 AppWebView에서 웹으로 전송할 응답:', response);
         
-        // 웹에 직접 메시지 전달 (생체인증과 동일한 방식)
-        const jsCode = `
-          console.log('🔥 PIN 결과 전송:', ${JSON.stringify(response)});
-          
-          // handleRNMessage 함수가 있으면 직접 호출
-          if (typeof window.handleRNMessage === 'function') {
-            window.handleRNMessage(${JSON.stringify(response)});
-            console.log('✅ handleRNMessage 호출됨');
-          } else {
-            console.error('❌ handleRNMessage 함수 없음');
-          }
-          
-          // 추가: window.postMessage로도 이벤트 발생 (backup)
-          window.postMessage(${JSON.stringify(response)}, '*');
-          
-          true;
-        `;
-        
+        // 웹에 직접 메시지 전달
         console.log('💉 JavaScript 코드 주입 시작');
-        webViewRef.current?.injectJavaScript(jsCode);
+        sendToWeb(response);
         console.log('✅ JavaScript 코드 주입 완료');
       };
 
@@ -314,27 +241,8 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
     } catch (error) {
       console.error('PIN 로그인 요청 처리 실패:', error);
       
-      const errorResponse = {
-        type: 'pinLoginFailure',
-        success: false,
-        error: 'PIN 로그인 요청 처리 중 오류가 발생했습니다.'
-      };
-      
-      const errorJsCode = `
-        // handleRNMessage 함수가 있으면 직접 호출
-        if (typeof window.handleRNMessage === 'function') {
-          window.handleRNMessage(${JSON.stringify(errorResponse)});
-        }
-        
-        // window.postMessage로도 이벤트 발생
-        window.postMessage(${JSON.stringify(errorResponse)}, '*');
-        
-        if (window.handlePinLoginResult) { 
-          window.handlePinLoginResult(${JSON.stringify(errorResponse)}); 
-        }
-        true;
-      `;
-      webViewRef.current?.injectJavaScript(errorJsCode);
+      const errorResponse = { type: 'pinLoginFailure', success: false, error: 'PIN 로그인 요청 처리 중 오류가 발생했습니다.' };
+      sendToWeb(errorResponse, { callback: 'handlePinLoginResult' });
     }
   };
 
@@ -343,102 +251,22 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
     
     try {
       // 즉시 "진행 중" 응답을 웹에 전송하여 로딩 상태 해제
-      const progressResponse = {
-        type: 'biometricLoginProgress',
-        success: true,
-        message: '생체인증을 진행 중입니다...'
-      };
-      
-      const immediateJsCode = `
-        // handleRNMessage 함수가 있으면 직접 호출
-        if (typeof window.handleRNMessage === 'function') {
-          window.handleRNMessage(${JSON.stringify(progressResponse)});
-        }
-        
-        // window.postMessage로도 이벤트 발생
-        window.postMessage(${JSON.stringify(progressResponse)}, '*');
-        
-        if (window.handleBiometricProgress) { 
-          window.handleBiometricProgress(${JSON.stringify(progressResponse)}); 
-        }
-        if (window.dispatchEvent) { 
-          window.dispatchEvent(new CustomEvent('biometricProgress', { 
-            detail: ${JSON.stringify(progressResponse)} 
-          })); 
-        }
-        true;
-      `;
-      webViewRef.current?.injectJavaScript(immediateJsCode);
+      const progressResponse = buildProgress('biometric', '생체인증을 진행 중입니다...');
+      sendToWeb(progressResponse, { callback: 'handleBiometricProgress', eventName: 'biometricProgress' });
       
       // 1. 현재 로그인된 사용자 정보 확인
       const currentUserEmail = await getLastEmail();
 
       if (!currentUserEmail) {
         // 에러: 로그인된 사용자 없음
-        const errorResponse = {
-          type: 'biometricLoginError',
-          success: false,
-          error: '저장된 사용자 정보가 없습니다.\n먼저 일반 로그인을 해주세요.'
-        };
-        
-        const errorJsCode = `
-          // handleRNMessage 함수가 있으면 직접 호출
-          if (typeof window.handleRNMessage === 'function') {
-            window.handleRNMessage(${JSON.stringify(errorResponse)});
-          }
-          
-          // window.postMessage로도 이벤트 발생
-          window.postMessage(${JSON.stringify(errorResponse)}, '*');
-          
-          if (window.handleBiometricResult) { 
-            window.handleBiometricResult(${JSON.stringify(errorResponse)}); 
-          }
-          true;
-        `;
-        webViewRef.current?.injectJavaScript(errorJsCode);
+        const errorResponse = buildError('biometric', '저장된 사용자 정보가 없습니다.\n먼저 일반 로그인을 해주세요.');
+        sendToWeb(errorResponse, { callback: 'handleBiometricResult' });
         return;
       }
 
       // 2. 서버에서 생체인증 설정 확인 (디바이스 기반)
-      try {
-        const deviceInfo = await getDeviceInfo();
-        const loginOptions = await fetchLoginOptionsWithDeviceId(deviceInfo.deviceId);
-        
-        if (!loginOptions?.hasPasskey) {
-          // 에러: 생체인증 설정 안됨 - 알림 표시
-          Alert.alert(
-            '생체인증 설정 필요',
-            '생체인증이 설정되지 않았습니다.\n마이페이지에서 생체인증을 먼저 설정해주세요.',
-            [{ text: '확인' }]
-          );
-          
-          const errorResponse = {
-            type: 'biometricLoginError',  
-            success: false,
-            error: '생체인증이 설정되지 않았습니다.\n마이페이지에서 생체인증을 먼저 설정해주세요.'
-          };
-          
-          const errorJsCode = `
-            // handleRNMessage 함수가 있으면 직접 호출
-            if (typeof window.handleRNMessage === 'function') {
-              window.handleRNMessage(${JSON.stringify(errorResponse)});
-            }
-            
-            // window.postMessage로도 이벤트 발생
-            window.postMessage(${JSON.stringify(errorResponse)}, '*');
-            
-            if (window.handleBiometricResult) { 
-              window.handleBiometricResult(${JSON.stringify(errorResponse)}); 
-            }
-            true;
-          `;
-          webViewRef.current?.injectJavaScript(errorJsCode);
-          return;
-        }
-      } catch (optionsError) {
-        // 로그인 옵션 확인 실패 시에도 생체인증 시도 (서버에서 판단)
-        console.warn('Login options check failed, proceeding with biometric login:', optionsError);
-      }
+      const biometricEnabled = await ensureOptionEnabled('biometric');
+      if (!biometricEnabled) return;
 
       // 3. 모든 체크 통과 -> 생체인증 실행 (AppWebView_old와 동일)
       const result = await biometricLogin();
@@ -460,45 +288,13 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
       // 웹에 직접 메시지 전달
       console.log('📤 생체인증 결과를 웹에 전송:', response);
       
-      const jsCode = `
-        console.log('🔥 생체인증 결과 전송:', ${JSON.stringify(response)});
-        
-        // handleRNMessage 함수가 있으면 직접 호출
-        if (typeof window.handleRNMessage === 'function') {
-          window.handleRNMessage(${JSON.stringify(response)});
-          console.log('✅ handleRNMessage 호출됨');
-        } else {
-          console.error('❌ handleRNMessage 함수 없음');
-        }
-        
-        // 추가: window.postMessage로도 이벤트 발생 (backup)
-        window.postMessage(${JSON.stringify(response)}, '*');
-        
-        true;
-      `;
-      webViewRef.current?.injectJavaScript(jsCode);
+      sendToWeb(response);
       
     } catch (error) {
       console.error('생체인증 로그인 요청 처리 실패:', error);
       
-      const errorResponse = {
-        type: 'biometricLoginFailure',
-        success: false,
-        error: '생체인증 로그인 요청 처리 중 오류가 발생했습니다.'
-      };
-      
-      const errorJsCode = `
-        // handleRNMessage 함수가 있으면 직접 호출
-        if (typeof window.handleRNMessage === 'function') {
-          window.handleRNMessage(${JSON.stringify(errorResponse)});
-        }
-        
-        // window.postMessage로도 이벤트 발생
-        window.postMessage(${JSON.stringify(errorResponse)}, '*');
-        
-        true;
-      `;
-      webViewRef.current?.injectJavaScript(errorJsCode);
+      const errorResponse = { type: 'biometricLoginFailure', success: false, error: '생체인증 로그인 요청 처리 중 오류가 발생했습니다.' };
+      sendToWeb(errorResponse);
     }
   };
 
@@ -754,6 +550,7 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
           if (parsed.success === false) {
             // 로그인 실패는 새로고침 없이 처리 (입력 정보 유지)
             console.log('로그인 실패 - 새로고침 없이 처리 (입력 정보 유지)');
+            await handleLoginFailure(parsed);
           }
           break;
           
