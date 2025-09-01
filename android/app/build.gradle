@@ -117,20 +117,6 @@ android {
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }
     }
-
-    // APK 파일명 커스터마이징
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            def appName = "Bizverse" // 앱 이름
-            def versionName = variant.versionName
-            def versionCode = variant.versionCode
-            def buildType = variant.buildType.name
-            def date = new Date().format('yyyyMMdd')
-            
-            // APK 파일명 패턴: Bizverse-v1.0.0-20250828-release.apk
-            outputFileName = "${appName}-v${versionName}-${date}-${buildType}.apk"
-        }
-    }
     packagingOptions {
         jniLibs {
             useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)
@@ -189,3 +175,5 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+apply plugin: 'com.google.gms.google-services'

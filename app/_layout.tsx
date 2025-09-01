@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { FCMService } from '@/utils/fcm';
 
 // 전역 에러 핸들러 설정
 if (__DEV__) {

@@ -4,6 +4,7 @@ import { loginWithPinOnServer, biometricLoginOnServer, fetchLoginOptionsWithDevi
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
 import { webViewManager } from '@/utils/webview-manager';
+import { FCMService } from '@/utils/fcm';
 
 /**
  * 사용자 정보 타입
@@ -77,6 +78,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Failed to load stored auth info:', error);
       } finally {
+        // 앱 시작 시 FCM 초기화 (로그인 여부와 무관하게)
+        FCMService.initialize().catch(error => {
+          console.warn('앱 시작 시 FCM 초기화 실패 (무시됨):', error);
+        });
+        
         setReady(true);  // 초기화 완료
       }
     })();
@@ -105,7 +111,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await setLastEmail(result.user.email);
       }
 
-      // 6. 성공 시 새로운 토큰 정보와 함께 반환
+      // 6. FCM 토큰 서버 전송 (백그라운드에서)
+      FCMService.initialize(result.accessToken).catch(error => {
+        console.warn('FCM 초기화 실패 (무시됨):', error);
+      });
+
+      // 7. 성공 시 새로운 토큰 정보와 함께 반환
       console.log('PIN 로그인 성공 - 토큰 저장 완료:', {
         user: result.user?.email,
         hasAccessToken: !!result.accessToken,
@@ -201,6 +212,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (biometricResult.user?.email) {
         await setLastEmail(biometricResult.user.email);
       }
+
+      // 8. FCM 토큰 서버 전송 (백그라운드에서)
+      FCMService.initialize(biometricResult.accessToken).catch(error => {
+        console.warn('FCM 초기화 실패 (무시됨):', error);
+      });
       
       return { 
         success: true, 
@@ -236,6 +252,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // 마지막 로그인 이메일 저장 (PIN 로그인 등에서 사용)
     if (payload.user && payload.user.email) {
       await setLastEmail(payload.user.email);
+    }
+    
+    // FCM 토큰 서버 전송 (백그라운드에서)
+    if (payload.accessToken) {
+      FCMService.initialize(payload.accessToken).catch(error => {
+        console.warn('FCM 초기화 실패 (무시됨):', error);
+      });
     }
     
     setHasStoredSession(true);

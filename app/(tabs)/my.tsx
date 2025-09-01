@@ -10,7 +10,8 @@ import { fetchPinStatus } from '@/utils/api';
 import { getLastEmail } from '@/utils/secure';
 import { useEffect, useState } from 'react';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { Platform } from 'react-native';
+import { Platform, Clipboard } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 // import { useAuth } from '@/hooks/useAuth';
 
 type MenuItem = { key: string; title: string; url?: string };
@@ -22,6 +23,22 @@ export default function MyScreen() {
     const { user, token, logout, fetchLoginOptions, accessToken } = useAuth();
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [loginOptions, setLoginOptions] = useState<{ hasPin: boolean; hasPasskey: boolean; email: string } | null>(null);
+    const [fcmToken, setFcmToken] = useState<string | null>(null);
+
+    // FCM 토큰 가져오기
+    useEffect(() => {
+      const getFCMToken = async () => {
+        try {
+          const token = await messaging().getToken();
+          setFcmToken(token);
+          console.log('📱 FCM 토큰 받아옴:', token);
+        } catch (error) {
+          console.error('FCM 토큰 가져오기 실패:', error);
+        }
+      };
+
+      getFCMToken();
+    }, []);
     
     // 로그인 상태에 따라 메뉴 아이템 설정
     useEffect(() => {
@@ -41,6 +58,7 @@ export default function MyScreen() {
               { key: 'profile', title: `${user.email}님` },
               { key: 'easyLogin', title: pinTitle },
               { key: 'biometricSetup', title: biometricTitle },
+              { key: 'fcmToken', title: 'FCM 토큰 보기' },
               { key: 'orders', title: '이전주문조회', url: resolveWebUrl(`${BASE}/order-history`) },
               { key: 'help', title: '고객센터', url: resolveWebUrl(`${BASE}/customer-center`) },
               { key: 'logout', title: '로그아웃' },
@@ -52,6 +70,7 @@ export default function MyScreen() {
               { key: 'profile', title: `${user.email}님` },
               { key: 'easyLogin', title: 'PIN 로그인 설정' },
               { key: 'biometricSetup', title: '생체등록설정' },
+              { key: 'fcmToken', title: 'FCM 토큰 보기' },
               { key: 'orders', title: '이전주문조회', url: resolveWebUrl(`${BASE}/order-history`) },
               { key: 'help', title: '고객센터', url: resolveWebUrl(`${BASE}/customer-center`) },
               { key: 'logout', title: '로그아웃' },
@@ -65,6 +84,7 @@ export default function MyScreen() {
             { key: 'signup', title: '회원가입', url: resolveWebUrl(`${BASE}/signup`) },
           ];
           
+          baseMenu.push({ key: 'fcmToken', title: 'FCM 토큰 보기' });
           baseMenu.push({ key: 'help', title: '고객센터', url: resolveWebUrl(`${BASE}/customer-center`) });
           
           setMenuItems(baseMenu);
@@ -274,6 +294,27 @@ export default function MyScreen() {
           }
           return;
         }
+        
+        if (item.key === 'fcmToken') {
+          // FCM 토큰 보기 및 복사
+          if (fcmToken) {
+            Alert.alert(
+              'FCM 토큰',
+              fcmToken,
+              [
+                { text: '복사', onPress: () => {
+                  Clipboard.setString(fcmToken);
+                  Alert.alert('복사됨', 'FCM 토큰이 클립보드에 복사되었습니다.');
+                }},
+                { text: '닫기', style: 'cancel' }
+              ]
+            );
+          } else {
+            Alert.alert('알림', 'FCM 토큰을 가져오는 중입니다. 잠시 후 다시 시도해주세요.');
+          }
+          return;
+        }
+        
         if (item.url) {
           router.push(
             (`/webview?url=${encodeURIComponent(item.url)}&title=${encodeURIComponent(item.title)}`) as any

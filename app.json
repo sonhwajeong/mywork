@@ -12,7 +12,9 @@
       "bundleIdentifier": "com.yourcompany.test2"
     },
     "android": {
-      "package": "com.yourcompany.test2"
+      "package": "com.yourcompany.test2",
+      "googleServicesFile": "./google-services.json",
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",
@@ -20,7 +22,18 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/messaging",
+        {
+          "android": {
+            "foregroundNotifications": {
+              "enabled": true
+            }
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

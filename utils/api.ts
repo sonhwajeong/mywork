@@ -388,3 +388,88 @@ export async function setupBiometricOnServer(payload: {
   }
 }
 
+/**
+ * FCM 토큰을 서버에 전송
+ * @param fcmToken FCM 토큰
+ * @param accessToken 인증 토큰 (옵션)
+ * @returns 성공/실패 정보
+ */
+export async function sendFCMTokenToServer(fcmToken: string, accessToken?: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    console.log('📤 FCM 토큰을 서버에 전송 시작:', {
+      tokenLength: fcmToken.length,
+      hasAccessToken: !!accessToken
+    });
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+
+    // 액세스 토큰이 있으면 Authorization 헤더 추가
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(`${API_BASE}/auth/fcm`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        deviceToken: fcmToken
+      })
+    });
+
+    const responseText = await response.text();
+    console.log('FCM 토큰 전송 응답:', {
+      status: response.status,
+      statusText: response.statusText,
+      body: responseText
+    });
+
+    if (!response.ok) {
+      let errorMessage = 'FCM 토큰 전송에 실패했습니다.';
+      try {
+        const errorData = JSON.parse(responseText);
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch {
+        errorMessage = responseText || errorMessage;
+      }
+      
+      console.error('FCM 토큰 전송 실패:', {
+        status: response.status,
+        message: errorMessage
+      });
+      
+      return {
+        success: false,
+        message: errorMessage
+      };
+    }
+
+    // 성공 응답 처리
+    let successResponse;
+    if (responseText.trim()) {
+      try {
+        successResponse = JSON.parse(responseText);
+      } catch {
+        successResponse = { success: true, message: 'FCM 토큰이 성공적으로 전송되었습니다.' };
+      }
+    } else {
+      successResponse = { success: true, message: 'FCM 토큰이 성공적으로 전송되었습니다.' };
+    }
+
+    console.log('✅ FCM 토큰 전송 성공:', successResponse);
+    
+    return {
+      success: true,
+      message: successResponse.message || 'FCM 토큰이 성공적으로 전송되었습니다.'
+    };
+
+  } catch (error) {
+    console.error('❌ FCM 토큰 전송 중 네트워크 오류:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'FCM 토큰 전송 중 오류가 발생했습니다.'
+    };
+  }
+}
+

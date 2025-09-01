@@ -19,7 +19,9 @@
       "Bash(npm start)",
       "Bash(npm run lint)",
       "Bash(npx expo start:*)",
-      "Bash(move AppWebView.tsx AppWebView_old.tsx)"
+      "Bash(move AppWebView.tsx AppWebView_old.tsx)",
+      "Bash(copy:*)",
+      "Bash(dir androidappgoogle-services.json)"
     ],
     "deny": []
   }
