@@ -336,45 +336,56 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
         console.log('⚠️ refreshToken이 없어서 completeLogin을 호출하지 않습니다.');
       }
       
-      // 4. 웹이 새로고침 후 토큰을 찾을 수 있도록 localStorage에 저장
+      // 4. 웹의 AuthContext handleRNMessage를 통해 토큰 저장 처리
+      // 중복 localStorage 저장 로직 제거 - 웹의 AuthContext가 처리함
+      const loginMessage = {
+        type: 'loginSuccess', // 웹의 일반 로그인으로 처리
+        success: true,
+        accessToken: parsed.accessToken,
+        refreshToken: parsed.refreshToken,
+        expiresAt: parsed.expiresAt,
+        user: {
+          id: user.email,
+          email: user.email,
+          name: user.name,
+          loginMethod: parsed.user?.loginMethod || 'email'
+        }
+      };
+
+      // 웹의 handleRNMessage를 통해 처리 (웹 AuthContext가 설정한 함수 사용)
       const jsCode = `
         try {
-          console.log('[WebView] 토큰을 localStorage에 저장 중...');
-          if (typeof(Storage) !== "undefined") {
-            localStorage.setItem('accessToken', ${JSON.stringify(parsed.accessToken)});
-            localStorage.setItem('refreshToken', ${JSON.stringify(parsed.refreshToken)});
-            localStorage.setItem('expiresAt', ${JSON.stringify(parsed.expiresAt)});
+          console.log('[WebView] 웹의 handleRNMessage 호출하여 로그인 처리');
+          if (typeof window.handleRNMessage === 'function') {
+            window.handleRNMessage(${JSON.stringify(loginMessage)});
+            console.log('[WebView] ✅ 웹의 handleRNMessage로 로그인 처리 완료');
+          } else {
+            console.warn('[WebView] ⚠️ 웹의 handleRNMessage가 아직 설정되지 않음 - 직접 localStorage 저장');
+            // 폴백: 웹 AuthContext가 아직 로드되지 않은 경우
+            localStorage.setItem('accessToken', '${parsed.accessToken}');
+            localStorage.setItem('refreshToken', '${parsed.refreshToken}');
+            localStorage.setItem('expiresAt', '${parsed.expiresAt}');
             localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));
             
-            // 웹의 tokenStore 형식에 맞춰 저장
             const tokenData = {
-              accessToken: ${JSON.stringify(parsed.accessToken)},
-              refreshToken: ${JSON.stringify(parsed.refreshToken)},
-              expiresAt: ${JSON.stringify(parsed.expiresAt)}
+              accessToken: '${parsed.accessToken}',
+              refreshToken: '${parsed.refreshToken}',
+              expiresAt: ${parsed.expiresAt}
             };
             localStorage.setItem('tokens', JSON.stringify(tokenData));
             
-            // 웹의 userStore 형식에 맞춰 저장
             const userData = {
-              id: ${JSON.stringify(user.email)},
-              email: ${JSON.stringify(user.email)},
-              name: ${JSON.stringify(user.name)},
-              loginMethod: 'pin',
+              id: '${user.email}',
+              email: '${user.email}',
+              name: '${user.name}',
+              loginMethod: 'email',
               lastLoginAt: Date.now()
             };
             localStorage.setItem('userData', JSON.stringify(userData));
-            
-            console.log('[WebView] 토큰이 localStorage에 저장됨:', {
-              accessToken: ${JSON.stringify(parsed.accessToken?.substring(0, 50) + '...')},
-              refreshToken: ${JSON.stringify(parsed.refreshToken?.substring(0, 20) + '...')},
-              expiresAt: new Date(${JSON.stringify(parsed.expiresAt)}).toLocaleString(),
-              user: ${JSON.stringify(user)}
-            });
-          } else {
-            console.error('[WebView] localStorage를 사용할 수 없습니다');
+            console.log('[WebView] ✅ 폴백으로 localStorage 저장 완료');
           }
         } catch (e) {
-          console.error('[WebView] localStorage 저장 실패:', e);
+          console.error('[WebView] 웹 로그인 처리 실패:', e);
         }
         true;
       `;
@@ -637,190 +648,14 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
       
       // WebView 인스턴스 고유 ID 생성 및 로깅
       const webViewInstanceId = 'webview_' + Math.random().toString(36).substr(2, 9);
-      console.log('🔍 WebView Instance ID:', webViewInstanceId, 'URL:', window.location.href);
-      console.log('🔍 localStorage 상태 (동기화 전):', {
-        accessToken: !!localStorage.getItem('accessToken'),
-        refreshToken: !!localStorage.getItem('refreshToken'),
-        tokens: !!localStorage.getItem('tokens')
-      });
+
 
       // RN 앱의 토큰 상태를 localStorage에 동기화
       const syncTokensFromRN = ${JSON.stringify({
         token: token,
         user: user
       })};
-      
-      console.log('🔄 RN 앱 토큰 상태:', {
-        hasToken: !!syncTokensFromRN.token,
-        hasUser: !!syncTokensFromRN.user,
-        userEmail: syncTokensFromRN.user?.email
-      });
-      
-      if (syncTokensFromRN.token && syncTokensFromRN.user) {
-        // RN 앱에 토큰이 있으면 localStorage에 동기화
-        console.log('✅ RN 토큰을 localStorage에 동기화');
-        localStorage.setItem('accessToken', syncTokensFromRN.token);
-        localStorage.setItem('user', JSON.stringify(syncTokensFromRN.user));
-        
-        // 웹의 tokenStore 형식으로도 저장
-        const tokenData = {
-          accessToken: syncTokensFromRN.token,
-          expiresAt: Date.now() + 3600000 // 1시간 후
-        };
-        localStorage.setItem('tokens', JSON.stringify(tokenData));
-        
-        const userData = {
-          id: syncTokensFromRN.user.email,
-          email: syncTokensFromRN.user.email,
-          name: syncTokensFromRN.user.name || 'User',
-          loginMethod: 'synced',
-          lastLoginAt: Date.now()
-        };
-        localStorage.setItem('userData', JSON.stringify(userData));
-      } else if (!syncTokensFromRN.token) {
-        // RN 앱에 토큰이 없으면 localStorage도 정리
-        console.log('🗑️ RN 토큰이 없어 localStorage 정리');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        localStorage.removeItem('tokens');
-        localStorage.removeItem('userData');
-        localStorage.removeItem('expiresAt');
-      }
-      
-      console.log('🔍 localStorage 상태 (동기화 후):', {
-        accessToken: !!localStorage.getItem('accessToken'),
-        refreshToken: !!localStorage.getItem('refreshToken'),
-        tokens: !!localStorage.getItem('tokens'),
-        userData: !!localStorage.getItem('userData')
-      });
-      
-      // RN에서 웹으로 메시지를 받을 수 있는 핸들러 설정
-      window.handleRNMessage = function(message) {
-        console.log('📥 Web received RN message:', message.type);
-        
-        // alert로 메시지 확인 (디버깅용)
-    //    alert('Web received: ' + message.type);
-        
-        switch(message.type) {
-          case 'logout':
-          //  console.log('🔓 Processing logout from RN');
-            // 로그아웃 처리
-            if (typeof window.handleLogout === 'function') {
-              window.handleLogout();
-            }
-            // localStorage 정리
-            if (typeof localStorage !== 'undefined') {
-              localStorage.clear();
-            }
-            // 페이지 새로고침
-            setTimeout(() => window.location.reload(), 100);
-            break;
-            
-          case 'biometricLoginSuccess':
-            console.log('✅ Biometric login success from RN');
-            if (message.success && message.accessToken && message.refreshToken) {
-              // 토큰을 localStorage에 저장
-              if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('accessToken', message.accessToken);
-                localStorage.setItem('refreshToken', message.refreshToken);
-                localStorage.setItem('expiresAt', message.expiresAt.toString());
-                if (message.user) {
-                  localStorage.setItem('user', JSON.stringify(message.user));
-                }
-                
-                // 웹의 tokenStore, userStore 형식으로도 저장
-                const tokenData = {
-                  accessToken: message.accessToken,
-                  refreshToken: message.refreshToken,
-                  expiresAt: message.expiresAt
-                };
-                localStorage.setItem('tokens', JSON.stringify(tokenData));
-                
-                const userData = {
-                  id: message.user?.email || 'user',
-                  email: message.user?.email || 'user@example.com',
-                  name: message.user?.name || 'User',
-                  loginMethod: 'biometric',
-                  lastLoginAt: Date.now()
-                };
-                localStorage.setItem('userData', JSON.stringify(userData));
-                
-                // RN 앱 인증 상태도 업데이트하도록 신호 전송
-                window.postMessage({
-                  type: 'RN_UPDATE_AUTH_STATE',
-                  refreshToken: message.refreshToken,
-                  accessToken: message.accessToken,
-                  user: message.user
-                }, '*');
-              }
-              // 페이지 새로고침하여 로그인 상태 반영
-              setTimeout(() => window.location.reload(), 100);
-            }
-            break;
-            
-          case 'pinLoginSuccess':
-            console.log('✅ PIN login success from RN');
-            if (message.success && message.accessToken && message.refreshToken) {
-              // 토큰을 localStorage에 저장
-              if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('accessToken', message.accessToken);
-                localStorage.setItem('refreshToken', message.refreshToken);
-                localStorage.setItem('expiresAt', message.expiresAt.toString());
-                if (message.user) {
-                  localStorage.setItem('user', JSON.stringify(message.user));
-                }
-                
-                // 웹의 tokenStore, userStore 형식으로도 저장
-                const tokenData = {
-                  accessToken: message.accessToken,
-                  refreshToken: message.refreshToken,
-                  expiresAt: message.expiresAt
-                };
-                localStorage.setItem('tokens', JSON.stringify(tokenData));
-                
-                const userData = {
-                  id: message.user?.email || 'user',
-                  email: message.user?.email || 'user@example.com',
-                  name: message.user?.name || 'User',
-                  loginMethod: 'pin',
-                  lastLoginAt: Date.now()
-                };
-                localStorage.setItem('userData', JSON.stringify(userData));
-                
-                console.log('✅ PIN 로그인 토큰이 localStorage에 저장됨');
-                
-                // RN 앱 인증 상태도 업데이트하도록 신호 전송
-                window.postMessage({
-                  type: 'RN_UPDATE_AUTH_STATE',
-                  refreshToken: message.refreshToken,
-                  accessToken: message.accessToken,
-                  user: message.user
-                }, '*');
-              }
-              // 페이지 새로고침하여 로그인 상태 반영
-              setTimeout(() => {
-                console.log('🔄 PIN 로그인 후 페이지 새로고침');
-                window.location.reload();
-              }, 100);
-            }
-            break;
-            
-          case 'biometricLoginError':
-          case 'pinLoginError':
-            console.error('❌ Login error from RN:', message.error);
-            alert(message.error || 'Login failed');
-            break;
-            
-          case 'deviceInfo':
-            console.log('📱 Device info from RN:', message.deviceInfo);
-            if (window.handleDeviceInfoResult) {
-              window.handleDeviceInfoResult(message);
-            }
-            break;
-        }
-      };
-      
+
       // RN에서 보낸 메시지를 받는 이벤트 리스너 설정
       window.addEventListener('message', function(event) {
         try {

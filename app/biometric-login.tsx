@@ -6,12 +6,6 @@ import { hasPasskeySupport, getPasskeyAssertion } from '@/utils/passkeys';
 import { useAuth } from '@/hooks/useAuth';
 import * as LocalAuthentication from 'expo-local-authentication';
 
-// 패스키(WebAuthn/FIDO2) 로그인 화면
-// 흐름 개요
-// 1) (선행) 로컬 생체인증으로 사용자 의도 확인 (지문/Face ID 등)
-// 2) 서버에서 WebAuthn 로그인 옵션(Challenge 등) 수신
-// 3) 단말 플랫폼 인증기(등록된 개인키)로 Challenge 서명(assertion 생성)
-// 4) assertion을 서버로 전송해 공개키로 검증 → 로그인 완료
 export default function PasskeyScreen() {
   const router = useRouter();
   const { user, completeLogin, biometricLogin } = useAuth();
