@@ -3,7 +3,6 @@ import * as Device from 'expo-device';
 
 export const SECURE_KEYS = {
   refreshToken: 'refreshToken',
-  accessToken: 'accessToken',
   pinEnabled: 'pinEnabled',
   lastEmail: 'lastEmail',
   deviceId: 'deviceId',
