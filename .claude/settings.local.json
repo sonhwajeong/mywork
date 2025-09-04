@@ -21,7 +21,20 @@
       "Bash(npx expo start:*)",
       "Bash(move AppWebView.tsx AppWebView_old.tsx)",
       "Bash(copy:*)",
-      "Bash(dir androidappgoogle-services.json)"
+      "Bash(dir androidappgoogle-services.json)",
+      "Read(/D:\\Sources\\mywork\\test2/**)",
+      "Read(/D:\\Sources\\mywork\\test2/**)",
+      "Read(/D:\\Sources\\mywork\\test2/**)",
+      "Bash(dir app)",
+      "Read(/D:\\Sources\\mywork\\test2\\app/**)",
+      "Bash(dir hooks)",
+      "Read(/D:\\Sources\\mywork\\test2\\hooks/**)",
+      "Bash(dir utils)",
+      "Read(/D:\\Sources\\mywork\\test2\\app/**)",
+      "Read(/D:\\Sources\\mywork\\test2\\utils/**)",
+      "Bash(dir:*)",
+      "Read(/D:\\Sources\\mywork\\test2\\scripts/**)",
+      "Read(/D:\\Sources\\mywork\\test2/**)"
     ],
     "deny": []
   }

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { SECURE_KEYS, getSecureItem, setSecureItem, deleteSecureItem, getPinEnabled, setLastEmail, getLastEmail, getDeviceInfo } from '@/utils/secure';
-import { loginWithPinOnServer, biometricLoginOnServer, fetchLoginOptionsWithDeviceId, logoutOnServer } from '@/utils/api';
+import { loginWithPinOnServer, biometricLoginOnServer, fetchLoginOptionsWithDeviceId, logoutOnServer, checkTokenValid, refreshAccessToken } from '@/utils/api';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
 import { webViewManager } from '@/utils/webview-manager';
@@ -63,20 +63,160 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [lastWebLoginMessage, setLastWebLoginMessage] = useState<WebLoginMessage | null>(null); // WebView 로그인 메시지
 
   /**
-   * 앱 시작 시 저장된 인증 정보 로드
+   * 앱 시작 시 저장된 인증 정보 로드 및 토큰 검증
    */
   useEffect(() => {
     (async () => {
       try {
-        const [storedToken, localPinFlag] = await Promise.all([
-          getSecureItem(SECURE_KEYS.refreshToken),  // 저장된 리프레시 토큰 확인
-          getPinEnabled(),                          // PIN 설정 상태 확인
+        console.log('🚀 앱 시작 - 인증 정보 로드 및 토큰 검증 시작');
+
+        // 1. 디바이스 ID 먼저 생성/로드
+        const deviceInfo = await getDeviceInfo();
+        console.log('📱 디바이스 ID 로드 완료:', deviceInfo.deviceId);
+
+        // 2. 저장된 토큰 및 PIN 설정 상태 확인
+        const [storedRefreshToken, storedAccessToken, localPinFlag] = await Promise.all([
+          getSecureItem(SECURE_KEYS.refreshToken),    // 저장된 리프레시 토큰 확인
+          getSecureItem(SECURE_KEYS.accessToken),     // 저장된 액세스 토큰 확인
+          getPinEnabled(),                            // PIN 설정 상태 확인
+        ]);
+
+        console.log('🔍 저장된 토큰 확인:', {
+          hasRefreshToken: !!storedRefreshToken,
+          hasAccessToken: !!storedAccessToken,
+          pinEnabled: !!localPinFlag
+        });
+
+        
+
+        setHasStoredSession(!!storedRefreshToken);  // 세션 존재 여부 설정
+        setPinEnabledState(!!localPinFlag);         // PIN 활성화 상태 설정
+
+        // 3. 액세스 토큰이 있으면 검증 시도
+        if (storedAccessToken && storedRefreshToken) {
+          console.log('🔐 액세스 토큰 검증 시작');
+          
+          const checkResult = await checkTokenValid(storedAccessToken, deviceInfo.deviceId);
+          
+          if (checkResult.success) {
+            // 토큰이 유효한 경우
+            console.log('✅ 액세스 토큰 유효 - 사용자 상태 설정');
+            
+            setAccessToken(storedAccessToken);
+            setToken(storedRefreshToken);
+            setUser({
+              name: checkResult.userEmail,
+              email: checkResult.userEmail
+            });
+            
+            // 웹에 토큰 정보 전달
+            console.log('📤 웹에 RN_SET_TOKENS 메시지 전송');
+            webViewManager.broadcastSetTokens(
+              storedAccessToken, 
+              deviceInfo.deviceId, 
+              {
+                name: checkResult.userEmail,
+                email: checkResult.userEmail
+              }
+            );
+            
+          } else {
+            // 액세스 토큰이 만료되었거나 유효하지 않은 경우 - 리프레시 토큰으로 갱신 시도
+            console.log('⚠️ 액세스 토큰 무효 - 리프레시 토큰으로 갱신 시도');
+            
+            const refreshResult = await refreshAccessToken(storedRefreshToken, deviceInfo.deviceId);
+
+            if (refreshResult.success) {
+              // 리프레시 성공
+              console.log('✅ 토큰 리프레시 성공 - 새 액세스 토큰 저장');
+              
+              const newAccessToken = refreshResult.accessToken;
+              const userData = refreshResult.user;
+              
+              // 새로운 액세스 토큰 저장
+              await setSecureItem(SECURE_KEYS.accessToken, newAccessToken);
+              
+              setAccessToken(newAccessToken);
+              setToken(storedRefreshToken);
+              setUser({
+                name: userData.name,
+                email: userData.id
+              });
+              
+              // 웹에 새 토큰 정보 전달
+              console.log('📤 웹에 새 RN_SET_TOKENS 메시지 전송');
+              webViewManager.broadcastSetTokens(
+                newAccessToken,
+                deviceInfo.deviceId,
+                {
+                  name: userData.name,
+                  email: userData.id
+                }
+              );
+              
+            } else {
+              // 리프레시도 실패 - 로그아웃 처리
+              console.log('❌ 토큰 리프레시 실패 - 저장된 세션 정리');
+              
+              await Promise.all([
+                deleteSecureItem(SECURE_KEYS.refreshToken),
+                deleteSecureItem(SECURE_KEYS.accessToken)
+              ]);
+              
+              setHasStoredSession(false);
+              setAccessToken(null);
+              setToken(null);
+              setUser(null);
+            }
+          }
+        } else if (storedRefreshToken) {
+          // 액세스 토큰은 없고 리프레시 토큰만 있는 경우
+          console.log('🔄 액세스 토큰 없음 - 리프레시 토큰으로 생성 시도');
+          
+          const refreshResult = await refreshAccessToken(storedRefreshToken, deviceInfo.deviceId);
+          
+          if (refreshResult.success) {
+            console.log('✅ 리프레시 토큰으로 액세스 토큰 생성 성공');
+            
+            const newAccessToken = refreshResult.accessToken;
+            const userData = refreshResult.user;
+            
+            // 새로운 액세스 토큰 저장
+            await setSecureItem(SECURE_KEYS.accessToken, newAccessToken);
+            
+            setAccessToken(newAccessToken);
+            setToken(storedRefreshToken);
+            setUser({
+              name: userData.name,
+              email: userData.id
+            });
+            
+            // 웹에 토큰 정보 전달
+            console.log('📤 웹에 RN_SET_TOKENS 메시지 전송');
+            webViewManager.broadcastSetTokens(
+              newAccessToken,
+              deviceInfo.deviceId,
+              {
+                name: userData.name,
+                email: userData.id
+              }
+            );
+          }
+        }
+
+      } catch (error) {
+        console.error('❌ 앱 시작 시 인증 정보 로드/검증 실패:', error);
+        
+        // 오류 발생 시 세션 정리
+        await Promise.all([
+          deleteSecureItem(SECURE_KEYS.refreshToken).catch(() => {}),
+          deleteSecureItem(SECURE_KEYS.accessToken).catch(() => {})
         ]);
         
-        setHasStoredSession(!!storedToken);  // 세션 존재 여부 설정
-        setPinEnabledState(!!localPinFlag);  // PIN 활성화 상태 설정
-      } catch (error) {
-        console.error('Failed to load stored auth info:', error);
+        setHasStoredSession(false);
+        setAccessToken(null);
+        setToken(null);
+        setUser(null);
       } finally {
         // 앱 시작 시 FCM 초기화 (로그인 여부와 무관하게)
         FCMService.initialize().catch(error => {
@@ -84,6 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         
         setReady(true);  // 초기화 완료
+        console.log('🏁 앱 초기화 완료');
       }
     })();
   }, []);
@@ -154,7 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let loginOptions;
       try {
         loginOptions = await fetchLoginOptionsWithDeviceId(deviceInfo.deviceId);
-      } catch (error) {
+      } catch {
         return { 
           success: false, 
           error: '디바이스 정보를 확인할 수 없습니다.\n먼저 일반 로그인 후 생체인증을 설정해주세요.' 

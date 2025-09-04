@@ -29,10 +29,10 @@ For Android builds, use the Gradle wrapper in the android directory:
 
 **Navigation Structure**:
 - Root layout: `/app/_layout.tsx` - Handles font loading, splash screen, theme provider, and authentication guard
-- Tab layout: `/app/(tabs)/_layout.tsx` - Bottom tab navigation with Home, Cart (장바구니), and My (마이) tabs
+- Tab layout: `/app/(tabs)/_layout.tsx` - Bottom tab navigation with Home, Cart (장바구니), Files (파일관리), and My (마이) tabs
 - Authentication screens: `/app/biometric-login.tsx` with passkey authentication
 - PIN screens: `/app/pin-setup.tsx` and `/app/pin-unlock.tsx`
-- Main tabs: `/app/(tabs)/index.tsx` (Home), `/app/(tabs)/cart.tsx`, `/app/(tabs)/my.tsx`
+- Main tabs: `/app/(tabs)/index.tsx` (Home), `/app/(tabs)/cart.tsx`, `/app/(tabs)/files.tsx`, `/app/(tabs)/my.tsx`
 - WebView screen: `/app/webview.tsx` - Generic WebView component for external content
 
 **Authentication System**:
@@ -50,12 +50,13 @@ For Android builds, use the Gradle wrapper in the android directory:
 
 **Key Directories**:
 - `/app` - Main application screens and routing with authentication flows
-- `/components` - Reusable UI components with theming support
+- `/components` - Reusable UI components with theming support (ThemedText, ThemedView, HapticTab, ErrorBoundary, etc.)
 - `/constants` - App-wide constants including Colors and config
 - `/hooks` - Custom React hooks (useAuth, useColorScheme, useThemeColor)
-- `/utils` - Utility functions for API, security, passkeys, and Android settings
+- `/utils` - Utility functions for API, security, passkeys, FCM, Android settings, and webview management
 - `/types` - TypeScript type definitions
 - `/android` - Android-specific build files and native biometric enrollment module
+- `/scripts` - Project utility scripts including reset-project.js
 
 **Native Modules**:
 - Custom Android biometric enrollment module (`BiometricEnrollModule.kt`)
@@ -66,7 +67,9 @@ For Android builds, use the Gradle wrapper in the android directory:
 - Passkey (WebAuthn/FIDO2) support with react-native-passkeys
 - Dynamic module loading for passkey functionality
 - PIN-based authentication with server validation
-- Biometric authentication (legacy, being phased out)
+- Biometric authentication using expo-local-authentication
+- WebView manager for secure token passing between native and web contexts
+- FCM (Firebase Cloud Messaging) integration for push notifications
 
 ## TypeScript Configuration
 
@@ -81,6 +84,13 @@ For Android builds, use the Gradle wrapper in the android directory:
 - **Web**: Uses Metro bundler with static output
 - **URL Scheme**: `myapp://` - Custom scheme for deep linking
 
+**Additional Features**:
+- Firebase integration with FCM for push notifications (google-services.json configured)
+- WebView integration with secure token management
+- File system operations with expo-file-system and expo-document-picker
+- Image handling with expo-image and expo-image-picker
+- Media library access with expo-media-library
+
 ## Important Notes
 
 - New React Native architecture is enabled (`newArchEnabled: true`)
@@ -89,7 +99,8 @@ For Android builds, use the Gradle wrapper in the android directory:
 - FontAwesome icons and Expo Symbols are pre-configured
 - Splash screen and status bar are managed by Expo
 - API base URL configurable via `EXPO_PUBLIC_API_BASE_URL` environment variable
-- Mock mode enabled for development (`MOCK_WEB_AUTHN = true` in api.ts)
+- Mock mode available in api.ts for development testing
+- Uses cleartext traffic for Android development (`usesCleartextTraffic: true`)
 
 ## Testing
 
