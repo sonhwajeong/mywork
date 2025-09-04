@@ -41,6 +41,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="files"
+        options={{
+          title: '파일관리',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="folder.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="my"
         options={{
           title: '마이',

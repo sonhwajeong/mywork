@@ -123,6 +123,78 @@ class WebViewManager {
   }
 
   /**
+   * 모든 웹뷰에 토큰 설정 메시지를 전송합니다 (RN_SET_TOKENS).
+   * 앱 시작 시 유효한 토큰이 있을 때 웹에 전달
+   */
+  broadcastSetTokens(accessToken: string, deviceId: string, user?: { name: string; email: string }) {
+    const setTokensScript = `
+      (function() {
+        try {
+          console.log('[Native] RN_SET_TOKENS 메시지 전송');
+          
+          const tokenData = {
+            type: 'RN_SET_TOKENS',
+            accessToken: '${accessToken}',
+            deviceId: '${deviceId}',
+            timestamp: Date.now()
+          };
+          
+          ${user ? `tokenData.user = ${JSON.stringify(user)};` : ''}
+          
+          // 1. handleRNMessage 함수 호출 (웹 AuthContext 우선)
+          if (typeof window.handleRNMessage === 'function') {
+            console.log('[Native] handleRNMessage로 토큰 전송');
+            window.handleRNMessage(tokenData);
+          } else {
+            console.log('[Native] handleRNMessage 없음, localStorage에 직접 저장');
+            
+            // 2. localStorage에 직접 저장 (폴백)
+            localStorage.setItem('accessToken', '${accessToken}');
+            localStorage.setItem('deviceId', '${deviceId}');
+            
+            ${user ? `localStorage.setItem('user', JSON.stringify(${JSON.stringify(user)}));` : ''}
+            
+            // 토큰 형식으로도 저장
+            const tokens = {
+              accessToken: '${accessToken}',
+              expiresAt: Date.now() + 3600000 // 1시간 후
+            };
+            localStorage.setItem('tokens', JSON.stringify(tokens));
+            
+            // userStore 형식으로도 저장
+            ${user ? `
+            const userData = {
+              id: '${user.email}',
+              email: '${user.email}',
+              name: '${user.name}',
+              loginMethod: 'token_sync',
+              lastLoginAt: Date.now()
+            };
+            localStorage.setItem('userData', JSON.stringify(userData));
+            ` : ''}
+          }
+          
+          // 3. window.postMessage로도 전송
+          window.postMessage(tokenData, '*');
+          
+          // 4. custom event 발생
+          window.dispatchEvent(new CustomEvent('RN_SET_TOKENS', { 
+            detail: tokenData
+          }));
+          
+          console.log('[Native] RN_SET_TOKENS 전송 완료');
+        } catch (error) {
+          console.error('[Native] RN_SET_TOKENS 전송 실패:', error);
+        }
+      })();
+    `;
+    
+    console.log(`Broadcasting RN_SET_TOKENS to ${this.webViewRefs.size} WebViews`);
+    this.executeJavaScript(setTokensScript);
+  }
+
+
+  /**
    * 모든 웹뷰를 새로고침합니다.
    */
   reloadAllWebViews() {

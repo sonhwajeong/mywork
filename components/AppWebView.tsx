@@ -3,8 +3,8 @@ import { View, Alert } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { setLastEmail, getLastEmail, getDeviceInfo } from '@/utils/secure';
-import { fetchLoginOptionsWithDeviceId } from '@/utils/api';
+import { setLastEmail, getLastEmail, getDeviceInfo, getSecureItem, setSecureItem, SECURE_KEYS } from '@/utils/secure';
+import { fetchLoginOptionsWithDeviceId, refreshAccessToken } from '@/utils/api';
 import { webViewManager } from '@/utils/webview-manager';
 
 interface AppWebViewProps {
@@ -482,6 +482,82 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
     }
   };
 
+  const handleRefreshTokenRequest = async () => {
+    console.log('🔄 웹에서 리프레시 토큰 요청');
+    
+    try {
+      // 1. 저장된 리프레시 토큰과 디바이스 ID 가져오기
+      const [storedRefreshToken, deviceInfo] = await Promise.all([
+        getSecureItem(SECURE_KEYS.refreshToken),
+        getDeviceInfo()
+      ]);
+
+      if (!storedRefreshToken) {
+        console.error('❌ 저장된 리프레시 토큰이 없음');
+        
+        // 웹에 리프레시 실패 메시지 전송
+        const errorResponse = {
+          type: 'REFRESH_FAILED',
+          success: false,
+          error: '저장된 리프레시 토큰이 없습니다.'
+        };
+        sendToWeb(errorResponse);
+        return;
+      }
+
+      console.log('🔐 리프레시 토큰으로 새 액세스 토큰 요청');
+      
+      // 2. 리프레시 토큰으로 새 액세스 토큰 발급
+      const refreshResult = await refreshAccessToken(storedRefreshToken, deviceInfo.deviceId);
+
+      if (refreshResult.success && refreshResult.data) {
+        console.log('✅ 토큰 리프레시 성공');
+        
+        const { accessToken: newAccessToken, user } = refreshResult.data;
+        
+        // 3. 새 액세스 토큰 저장
+        await setSecureItem(SECURE_KEYS.accessToken, newAccessToken);
+        
+        // 4. 웹에 새 토큰 전송 (RN_SET_TOKENS)
+        const successResponse = {
+          type: 'RN_SET_TOKENS',
+          success: true,
+          accessToken: newAccessToken,
+          deviceId: deviceInfo.deviceId,
+          user: {
+            name: user.name,
+            email: user.id
+          },
+          timestamp: Date.now()
+        };
+        
+        console.log('📤 웹에 RN_SET_TOKENS 메시지 전송');
+        sendToWeb(successResponse);
+        
+      } else {
+        console.error('❌ 토큰 리프레시 실패');
+        
+        // 리프레시 실패 시 웹에 실패 메시지 전송
+        const errorResponse = {
+          type: 'REFRESH_FAILED',
+          success: false,
+          error: '토큰 리프레시에 실패했습니다.'
+        };
+        sendToWeb(errorResponse);
+      }
+      
+    } catch (error) {
+      console.error('❌ 리프레시 토큰 요청 처리 중 오류:', error);
+      
+      const errorResponse = {
+        type: 'REFRESH_FAILED',
+        success: false,
+        error: '토큰 리프레시 중 오류가 발생했습니다.'
+      };
+      sendToWeb(errorResponse);
+    }
+  };
+
   // === 메시지 큐 처리 ===
   
   const processMessageQueue = async (messages: any[]) => {
@@ -596,6 +672,11 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
           } catch (error) {
             console.error('❌ RN 앱 인증 상태 업데이트 실패:', error);
           }
+          break;
+
+        case 'GET_REFRESH':
+          // 웹에서 액세스 토큰 만료로 리프레시 요청
+          await handleRefreshTokenRequest();
           break;
           
         default:
