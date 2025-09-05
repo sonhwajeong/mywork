@@ -35,7 +35,11 @@
       "Bash(dir:*)",
       "Read(/D:\\Sources\\mywork\\test2\\scripts/**)",
       "Read(/D:\\Sources\\mywork\\test2/**)",
-      "Read(/D:\\Sources\\mywork\\test2\\hooks/**)"
+      "Read(/D:\\Sources\\mywork\\test2\\hooks/**)",
+      "Read(/D:\\Sources\\mywork\\test2\\components/**)",
+      "Read(/D:\\Sources\\mywork\\test2\\components/**)",
+      "Read(/D:\\Sources\\mywork\\test2\\components/**)",
+      "Read(/D:\\Sources\\mywork\\test2\\utils/**)"
     ],
     "deny": []
   }

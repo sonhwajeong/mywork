@@ -113,12 +113,59 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
     };
   }, []);
 
-  // WebView 로딩 완료 시 매니저에 등록
+  // WebView 로딩 완료 시 매니저에 등록 및 토큰 전송
   const handleLoadEnd = () => {
     const webView = webViewRef.current;
     if (webView) {
       console.log('📝 WebView 매니저에 등록 (로딩 완료)');
       webViewManager.registerWebView(webView);
+      
+      // WebView와 React 앱이 완전히 로드될 때까지 지연 후 토큰 전송
+      console.log('⏰ WebView 로딩 완료 - 2초 후 토큰 전송 시작');
+      setTimeout(() => {
+        console.log('🚀 지연 시간 완료 - 토큰 전송 시작');
+        injectInitialTokens();
+      }, 2000); // 2초 대기
+    }
+  };
+  
+  // WebView 로딩 완료 후 초기 토큰 전송
+  const injectInitialTokens = async () => {
+    try {
+      // 현재 사용자와 토큰 정보가 있는지 확인
+      if (token && user) {
+        console.log('💉 초기 토큰 주입 시작:', {
+          hasUser: !!user,
+          hasToken: !!token,
+          userEmail: user.email
+        });
+        
+        // handleRNMessage 함수 존재 여부 먼저 확인
+        const checkScript = `
+          (function(){
+            return typeof window.handleRNMessage === 'function';
+          })();
+        `;
+        
+        // 토큰 정보 전송
+        const deviceInfo = await getDeviceInfo();
+        const tokenMessage = {
+          type: 'RN_SET_TOKENS',
+          accessToken: token,
+          deviceId: deviceInfo.deviceId,
+          user: {
+            name: user.name,
+            email: user.email
+          }
+        };
+        
+        sendToWeb(tokenMessage);
+        console.log('✅ 초기 토큰 전송 완료');
+      } else {
+        console.log('⚠️ 토큰 또는 사용자 정보가 없어서 초기 토큰 전송 건너뛰기');
+      }
+    } catch (error) {
+      console.error('❌ 초기 토큰 주입 실패:', error);
     }
   };
 

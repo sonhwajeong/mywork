@@ -127,6 +127,18 @@ class WebViewManager {
    * 앱 시작 시 유효한 토큰이 있을 때 웹에 전달
    */
   broadcastSetTokens(accessToken: string, deviceId: string, user?: { name: string; email: string }) {
+    console.log(`⏰ broadcastSetTokens 호출 - 1초 후 전송 (WebView 준비 대기)`);
+    
+    // WebView와 AuthContext가 완전히 준비될 때까지 약간의 지연 시간
+    setTimeout(() => {
+      this._executeBroadcastSetTokens(accessToken, deviceId, user);
+    }, 1000);
+  }
+
+  /**
+   * 실제 토큰 전송을 수행하는 내부 메서드
+   */
+  private _executeBroadcastSetTokens(accessToken: string, deviceId: string, user?: { name: string; email: string }) {
     const setTokensScript = `
       (function() {
         try {
@@ -142,11 +154,18 @@ class WebViewManager {
           ${user ? `tokenData.user = ${JSON.stringify(user)};` : ''}
           
           // 1. handleRNMessage 함수 호출 (웹 AuthContext 우선)
+          console.log('[Native] handleRNMessage 존재 여부:', typeof window.handleRNMessage);
+          
           if (typeof window.handleRNMessage === 'function') {
-            console.log('[Native] handleRNMessage로 토큰 전송');
-            window.handleRNMessage(tokenData);
+            console.log('[Native] handleRNMessage로 토큰 전송 시도');
+            try {
+              window.handleRNMessage(tokenData);
+              console.log('[Native] handleRNMessage 호출 성공');
+            } catch (error) {
+              console.error('[Native] handleRNMessage 호출 실패:', error);
+            }
           } else {
-            console.log('[Native] handleRNMessage 없음, localStorage에 직접 저장');
+            console.log('[Native] handleRNMessage 없음 - 웹 AuthContext가 아직 로드되지 않았을 수 있음');
             
             // 2. localStorage에 직접 저장 (폴백)
             localStorage.setItem('accessToken', '${accessToken}');
@@ -183,6 +202,24 @@ class WebViewManager {
           }));
           
           console.log('[Native] RN_SET_TOKENS 전송 완료');
+          
+          // handleRNMessage가 없었다면 3초 후 한 번 더 시도
+          if (typeof window.handleRNMessage !== 'function') {
+            console.log('[Native] handleRNMessage 없었음 - 3초 후 재시도 예약');
+            setTimeout(() => {
+              if (typeof window.handleRNMessage === 'function') {
+                console.log('[Native] 재시도: handleRNMessage로 토큰 전송');
+                try {
+                  window.handleRNMessage(tokenData);
+                  console.log('[Native] 재시도 성공');
+                } catch (error) {
+                  console.error('[Native] 재시도 실패:', error);
+                }
+              } else {
+                console.log('[Native] 재시도해도 handleRNMessage 없음');
+              }
+            }, 3000);
+          }
         } catch (error) {
           console.error('[Native] RN_SET_TOKENS 전송 실패:', error);
         }
