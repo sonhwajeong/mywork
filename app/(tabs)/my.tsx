@@ -21,15 +21,6 @@ const BASE = WEBVIEW_BASE_URL.endsWith('/') ? WEBVIEW_BASE_URL.slice(0, -1) : WE
 export default function MyScreen() {
     const insets = useSafeAreaInsets();
     const { user, token, logout, fetchLoginOptions, accessToken } = useAuth();
-    
-    console.log('👤 My Screen 로그인 상태 체크:', {
-      hasToken: !!token,
-      hasUser: !!user,
-      hasAccessToken: !!accessToken,
-      tokenPreview: token ? `${token.substring(0, 10)}...` : null,
-      userEmail: user?.email || null,
-      loginCondition: !!(token && user)
-    });
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [loginOptions, setLoginOptions] = useState<{ hasPin: boolean; hasPasskey: boolean; email: string } | null>(null);
     const [fcmToken, setFcmToken] = useState<string | null>(null);

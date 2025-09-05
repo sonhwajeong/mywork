@@ -12,18 +12,9 @@ const HEADER_HEIGHT = 160;
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
-  const { token, ready, user, accessToken } = useAuth();
+  const { token, ready } = useAuth();
   const webViewRef = useRef<any>(null);
   const router = useRouter();
-  
-  console.log('🛒 Cart Screen 로그인 상태 체크:', {
-    ready,
-    hasToken: !!token,
-    hasUser: !!user,
-    hasAccessToken: !!accessToken,
-    tokenPreview: token ? `${token.substring(0, 10)}...` : null,
-    userEmail: user?.email || null
-  });
 
   if (!ready) {
     return (

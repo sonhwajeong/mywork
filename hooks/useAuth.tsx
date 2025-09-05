@@ -53,10 +53,6 @@ const AuthContext = createContext<AuthContextType | null>(null);
  * 인증 상태 관리를 위한 Provider 컴포넌트
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const providerId = useMemo(() => Date.now() + '-' + Math.random().toString(36).substr(2, 9), []);
-  
-  console.log('🏗️ AuthProvider 마운트 - ID:', providerId);
-  
   // 상태 관리
   const [ready, setReady] = useState(false);                    // 초기화 완료 상태
   const [user, setUser] = useState<User>(null);                 // 현재 사용자 정보
@@ -65,24 +61,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [hasStoredSession, setHasStoredSession] = useState(false); // 저장된 세션 존재 여부
   const [pinEnabled, setPinEnabledState] = useState(false);     // PIN 인증 활성화 여부
   const [lastWebLoginMessage, setLastWebLoginMessage] = useState<WebLoginMessage | null>(null); // WebView 로그인 메시지
-  
-  // 언마운트 추적
-  useEffect(() => {
-    return () => {
-      console.log('🏗️ AuthProvider 언마운트 - ID:', providerId);
-    };
-  }, [providerId]);
 
   /**
    * 앱 시작 시 저장된 인증 정보 로드 및 토큰 검증
    */
   useEffect(() => {
-    const effectId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-    console.log('🔄 useAuth useEffect 시작 - ID:', effectId);
-    
     (async () => {
       try {
-        console.log('🚀 앱 시작 - 인증 정보 로드 및 토큰 검증 시작 (ID:', effectId, ')');
+        console.log('🚀 앱 시작 - 인증 정보 로드 및 토큰 검증 시작');
 
         // 1. 디바이스 ID 먼저 생성/로드
         const deviceInfo = await getDeviceInfo();
@@ -112,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           const checkResult = await checkTokenValid(storedAccessToken, deviceInfo.deviceId);
           
-          if (checkResult.success && checkResult.data.valid) {
+          if (checkResult.success) {
             // 토큰이 유효한 경우
             console.log('✅ 액세스 토큰 유효 - 사용자 상태 설정');
             
@@ -122,14 +108,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               name: checkResult.userEmail,
               email: checkResult.userEmail
             });
-            
-            // 마지막 로그인 이메일 저장
-            if (checkResult.data.userEmail && typeof checkResult.data.userEmail === 'string') {
-              await setLastEmail(checkResult.userEmail);
-              console.log('✅ 토큰 검증 성공 후 lastEmail 저장:', checkResult.userEmail);
-            } else {
-              console.warn('⚠️ userEmail이 문자열이 아닙니다:', typeof checkResult.userEmail, checkResult.userEmail);
-            }
             
             // 웹에 토큰 정보 전달
             console.log('📤 웹에 RN_SET_TOKENS 메시지 전송');
@@ -162,16 +140,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setToken(storedRefreshToken);
               setUser({
                 name: userData.name,
-                email: userData.email
+                email: userData.id
               });
-              
-              // 마지막 로그인 이메일 저장
-              if (userData.email && typeof userData.email === 'string') {
-                await setLastEmail(userData.email);
-                console.log('✅ 토큰 리프레시 성공 후 lastEmail 저장:', userData.email);
-              } else {
-                console.warn('⚠️ userData.id가 문자열이 아닙니다:', typeof userData.email, userData.email);
-              }
               
               // 웹에 새 토큰 정보 전달
               console.log('📤 웹에 새 RN_SET_TOKENS 메시지 전송');
@@ -180,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 deviceInfo.deviceId,
                 {
                   name: userData.name,
-                  email: userData.email
+                  email: userData.id
                 }
               );
               
@@ -218,16 +188,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setToken(storedRefreshToken);
             setUser({
               name: userData.name,
-              email: userData.email
+              email: userData.id
             });
-            
-            // 마지막 로그인 이메일 저장
-            if (userData.email && typeof userData.email === 'string') {
-              await setLastEmail(userData.email);
-              console.log('✅ 액세스 토큰 없음->리프레시 후 lastEmail 저장:', userData.email);
-            } else {
-              console.warn('⚠️ userData.id가 문자열이 아닙니다:', typeof userData.email, userData.email);
-            }
             
             // 웹에 토큰 정보 전달
             console.log('📤 웹에 RN_SET_TOKENS 메시지 전송');
@@ -236,14 +198,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               deviceInfo.deviceId,
               {
                 name: userData.name,
-                email: userData.email
+                email: userData.id
               }
             );
           }
         }
 
       } catch (error) {
-        console.error('❌ 앱 시작 시 인증 정보 로드/검증 실패 (ID:', effectId, '):', error);
+        console.error('❌ 앱 시작 시 인증 정보 로드/검증 실패:', error);
         
         // 오류 발생 시 세션 정리
         await Promise.all([
@@ -262,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         
         setReady(true);  // 초기화 완료
-        console.log('🏁 앱 초기화 완료 (ID:', effectId, ')');
+        console.log('🏁 앱 초기화 완료');
       }
     })();
   }, []);
@@ -279,20 +241,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await loginWithPinOnServer(deviceId || 'unknown-device', pin, platform);
       
       // 4. 새로운 토큰으로 완전한 로그인 처리
-      await Promise.all([
-        setSecureItem(SECURE_KEYS.refreshToken, result.refreshToken),
-        setSecureItem(SECURE_KEYS.accessToken, result.accessToken)
-      ]);
+      await setSecureItem(SECURE_KEYS.refreshToken, result.refreshToken);
       setToken(result.refreshToken);
       setAccessToken(result.accessToken);
       setUser(result.user);
       setHasStoredSession(true);
 
       // 5. 로그인된 이메일 저장
-      if (result.user?.email && typeof result.user.email === 'string') {
+      if (result.user?.email) {
         await setLastEmail(result.user.email);
-      } else if (result.user?.email) {
-        console.warn('⚠️ PIN 로그인 - user.email이 문자열이 아닙니다:', typeof result.user.email, result.user.email);
       }
 
       // 6. FCM 토큰 서버 전송 (백그라운드에서)
@@ -386,20 +343,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       // 새로운 토큰들을 저장
-      await Promise.all([
-        setSecureItem(SECURE_KEYS.refreshToken, biometricResult.refreshToken),
-        setSecureItem(SECURE_KEYS.accessToken, biometricResult.accessToken)
-      ]);
+      await setSecureItem(SECURE_KEYS.refreshToken, biometricResult.refreshToken);
       setToken(biometricResult.refreshToken);
       setAccessToken(biometricResult.accessToken);
       setUser(biometricResult.user);
       setHasStoredSession(true);
 
       // 7. 로그인된 이메일 저장
-      if (biometricResult.user?.email && typeof biometricResult.user.email === 'string') {
+      if (biometricResult.user?.email) {
         await setLastEmail(biometricResult.user.email);
-      } else if (biometricResult.user?.email) {
-        console.warn('⚠️ 생체인증 로그인 - user.email이 문자열이 아닙니다:', typeof biometricResult.user.email, biometricResult.user.email);
       }
 
       // 8. FCM 토큰 서버 전송 (백그라운드에서)
@@ -429,15 +381,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * 토큰과 사용자 정보를 받아서 인증 상태를 설정
    */
   const completeLogin = async (payload: { refreshToken: string; user: { name: string; email: string }; accessToken?: string }) => {
-    // refreshToken과 accessToken을 동시에 저장
-    const storagePromises = [setSecureItem(SECURE_KEYS.refreshToken, payload.refreshToken)];
-    
-    if (payload.accessToken) {
-      storagePromises.push(setSecureItem(SECURE_KEYS.accessToken, payload.accessToken));
-    }
-    
-    await Promise.all(storagePromises);
-    
+    await setSecureItem(SECURE_KEYS.refreshToken, payload.refreshToken);
     setToken(payload.refreshToken);
     setUser(payload.user);
     
@@ -447,10 +391,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     // 마지막 로그인 이메일 저장 (PIN 로그인 등에서 사용)
-    if (payload.user?.email && typeof payload.user.email === 'string') {
+    if (payload.user && payload.user.email) {
       await setLastEmail(payload.user.email);
-    } else if (payload.user?.email) {
-      console.warn('⚠️ completeLogin - user.email이 문자열이 아닙니다:', typeof payload.user.email, payload.user.email);
     }
     
     // FCM 토큰 서버 전송 (백그라운드에서)
