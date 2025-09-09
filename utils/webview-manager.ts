@@ -1,11 +1,26 @@
 import { WebView } from 'react-native-webview';
 
 /**
+ * 토큰 검증 응답 콜백 타입
+ */
+type TokenVerificationCallback = (message: {
+  type: 'RN_SET_TOKENS_SUCCESS' | 'RN_SET_TOKENS_FAILED' | 'RN_SET_TOKENS_ERROR';
+  success: boolean;
+  deviceId: string;
+  user?: { id: string; email: string; loginMethod: string };
+  error?: string;
+  timestamp: number;
+}) => void;
+
+/**
  * 웹뷰 참조를 전역적으로 관리하는 매니저
  * 네이티브 앱에서 웹뷰로 메시지를 보낼 수 있게 해줍니다.
  */
 class WebViewManager {
   private webViewRefs: Set<WebView> = new Set();
+  private tokenVerificationCallbacks: Set<TokenVerificationCallback> = new Set();
+  private isWebViewReady: boolean = false;
+  private pendingTokenBroadcasts: Array<{ accessToken: string; deviceId: string; user?: { name: string; email: string } }> = [];
 
   /**
    * 웹뷰 참조를 등록합니다.
@@ -127,6 +142,21 @@ class WebViewManager {
    * 앱 시작 시 유효한 토큰이 있을 때 웹에 전달
    */
   broadcastSetTokens(accessToken: string, deviceId: string, user?: { name: string; email: string }) {
+    // WebView가 준비되지 않았으면 대기열에 추가
+    if (!this.isReady()) {
+      console.log('⏳ WebView 준비 대기 중 - 토큰 브로드캐스트를 대기열에 추가');
+      this.pendingTokenBroadcasts.push({ accessToken, deviceId, user });
+      return;
+    }
+
+    // WebView가 준비되었으면 즉시 전송
+    this.broadcastSetTokensImmediate(accessToken, deviceId, user);
+  }
+
+  /**
+   * 웹뷰에 즉시 토큰을 전송합니다 (내부 메서드)
+   */
+  private broadcastSetTokensImmediate(accessToken: string, deviceId: string, user?: { name: string; email: string }) {
     const setTokensScript = `
       (function() {
         try {
@@ -189,7 +219,7 @@ class WebViewManager {
       })();
     `;
     
-    console.log(`Broadcasting RN_SET_TOKENS to ${this.webViewRefs.size} WebViews`);
+    console.log(`✅ Broadcasting RN_SET_TOKENS to ${this.webViewRefs.size} WebViews`);
     this.executeJavaScript(setTokensScript);
   }
 
@@ -206,6 +236,78 @@ class WebViewManager {
         console.warn('Failed to reload WebView:', error);
       }
     });
+  }
+
+  /**
+   * 토큰 검증 응답 콜백을 등록합니다.
+   */
+  registerTokenVerificationCallback(callback: TokenVerificationCallback) {
+    this.tokenVerificationCallbacks.add(callback);
+    console.log(`Token verification callback registered. Total: ${this.tokenVerificationCallbacks.size}`);
+  }
+
+  /**
+   * 토큰 검증 응답 콜백을 해제합니다.
+   */
+  unregisterTokenVerificationCallback(callback: TokenVerificationCallback) {
+    this.tokenVerificationCallbacks.delete(callback);
+    console.log(`Token verification callback unregistered. Total: ${this.tokenVerificationCallbacks.size}`);
+  }
+
+  /**
+   * 웹에서 토큰 검증 응답을 받았을 때 호출되는 메서드
+   */
+  handleTokenVerificationResponse(message: {
+    type: 'RN_SET_TOKENS_SUCCESS' | 'RN_SET_TOKENS_FAILED' | 'RN_SET_TOKENS_ERROR';
+    success: boolean;
+    deviceId: string;
+    user?: { id: string; email: string; loginMethod: string };
+    error?: string;
+    timestamp: number;
+  }) {
+    console.log(`Processing token verification response: ${message.type}`, message);
+    
+    this.tokenVerificationCallbacks.forEach((callback) => {
+      try {
+        callback(message);
+      } catch (error) {
+        console.warn('Token verification callback failed:', error);
+      }
+    });
+  }
+
+  /**
+   * WebView가 준비되었음을 알립니다.
+   */
+  setWebViewReady() {
+    console.log('✅ WebView 준비 완료 - 대기 중인 토큰 브로드캐스트 처리');
+    this.isWebViewReady = true;
+    
+    // 대기 중인 토큰 브로드캐스트 처리
+    this.processPendingTokenBroadcasts();
+  }
+
+  /**
+   * WebView 준비 상태를 확인합니다.
+   */
+  isReady(): boolean {
+    return this.isWebViewReady && this.webViewRefs.size > 0;
+  }
+
+  /**
+   * 대기 중인 토큰 브로드캐스트를 처리합니다.
+   */
+  private processPendingTokenBroadcasts() {
+    if (this.pendingTokenBroadcasts.length > 0) {
+      console.log(`📤 대기 중인 토큰 브로드캐스트 ${this.pendingTokenBroadcasts.length}개 처리 중`);
+      
+      this.pendingTokenBroadcasts.forEach(({ accessToken, deviceId, user }) => {
+        this.broadcastSetTokensImmediate(accessToken, deviceId, user);
+      });
+      
+      this.pendingTokenBroadcasts = [];
+      console.log('✅ 모든 대기 중인 토큰 브로드캐스트 처리 완료');
+    }
   }
 
   /**

@@ -6,6 +6,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { FCMService } from '@/utils/fcm';
 
@@ -51,7 +52,6 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync();
-
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     ...FontAwesome.font,
@@ -67,10 +67,7 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  if (!loaded) {
-    return null;
-  }
-
+  // 폰트 로드 전에도 AuthProvider/GuardedStack가 마운트되어 인증 초기화가 먼저 실행됨
   return <RootLayoutNav />;
 }
 
@@ -91,7 +88,58 @@ function RootLayoutNav() {
 
 function GuardedStack() {
   const router = useRouter();
-  const { ready, hasStoredSession, token, pinEnabled } = useAuth();
+  const { ready, hasStoredSession, token, pinEnabled, initState } = useAuth();
+
+  // 초기화가 완료되지 않은 경우 로딩 화면 표시
+  if (!ready) {
+    return (
+      <Stack>
+        <Stack.Screen 
+          name="loading" 
+          options={{ headerShown: false }}
+          component={() => (
+            <View style={{ 
+              flex: 1, 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              backgroundColor: '#fff' 
+            }}>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 16, fontWeight: '500' }}>앱을 초기화하는 중...</Text>
+                <Text style={{ marginTop: 10, fontSize: 14, color: '#666' }}>
+                  {initState.step === 'starting' && '시작 중...'}
+                  {initState.step === 'device' && '디바이스 정보 로드 중...'}
+                  {initState.step === 'tokens' && '저장된 토큰 확인 중...'}
+                  {initState.step === 'validation' && '토큰 검증 중...'}
+                  {initState.step === 'timeout' && '⚠️ 초기화 시간 초과'}
+                  {initState.step === 'error' && `❌ 오류: ${initState.error}`}
+                </Text>
+                {(initState.step === 'timeout' || initState.step === 'error') && (
+                  <TouchableOpacity 
+                    onPress={() => {
+                      // React Native에서는 앱 재시작을 위해 다른 방법 필요
+                      console.log('앱 재시작 요청됨');
+                    }}
+                    style={{ 
+                      marginTop: 20, 
+                      paddingVertical: 10,
+                      paddingHorizontal: 20,
+                      backgroundColor: '#007AFF', 
+                      borderRadius: 8 
+                    }}
+                  >
+                    <Text style={{ color: 'white', fontWeight: '500' }}>
+                      다시 시도
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+        />
+      </Stack>
+    );
+  }
 
   // 로그인 상태 체크는 각 탭에서 개별적으로 처리
 

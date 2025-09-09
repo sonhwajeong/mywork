@@ -113,12 +113,18 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
     };
   }, []);
 
-  // WebView 로딩 완료 시 매니저에 등록
+  // WebView 로딩 완료 시 매니저에 등록 및 준비 상태 설정
   const handleLoadEnd = () => {
     const webView = webViewRef.current;
     if (webView) {
       console.log('📝 WebView 매니저에 등록 (로딩 완료)');
       webViewManager.registerWebView(webView);
+      
+      // 약간의 지연을 두고 WebView 준비 완료 알림 (DOM과 JS 초기화 완료 대기)
+      setTimeout(() => {
+        console.log('✅ WebView 초기화 완료 - 준비 상태 설정');
+        webViewManager.setWebViewReady();
+      }, 500); // 500ms 지연
     }
   };
 
@@ -677,6 +683,14 @@ export default function AppWebView({ url, style }: AppWebViewProps) {
         case 'GET_REFRESH':
           // 웹에서 액세스 토큰 만료로 리프레시 요청
           await handleRefreshTokenRequest();
+          break;
+
+        case 'RN_SET_TOKENS_SUCCESS':
+        case 'RN_SET_TOKENS_FAILED':
+        case 'RN_SET_TOKENS_ERROR':
+          // 웹에서 토큰 검증 응답 처리
+          console.log(`📬 토큰 검증 응답 수신: ${parsed.type}`, parsed);
+          webViewManager.handleTokenVerificationResponse(parsed);
           break;
           
         default:

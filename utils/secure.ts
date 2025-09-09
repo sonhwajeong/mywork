@@ -10,12 +10,29 @@ export const SECURE_KEYS = {
 } as const;
 
 export async function setSecureItem(key: string, value: string) {
+  console.log(`💾 SecureStore 저장 시작 - Key: ${key}, 길이: ${value?.length || 0}`);
   const options = { keychainService: 'app.secure' } as SecureStore.SecureStoreOptions;
-  await SecureStore.setItemAsync(key, value, options);
+  
+  try {
+    await SecureStore.setItemAsync(key, value, options);
+    console.log(`✅ SecureStore 저장 완료 - Key: ${key}`);
+  } catch (error) {
+    console.log(`❌ SecureStore 저장 실패 - Key: ${key}, Error:`, error);
+    throw error;
+  }
 }
 export async function getSecureItem(key: string) {
+  console.log(`🔐 SecureStore 조회 시작 - Key: ${key}`);
   const options = { keychainService: 'app.secure' } as SecureStore.SecureStoreOptions;
-  return SecureStore.getItemAsync(key, options);
+  
+  try {
+    const result = await SecureStore.getItemAsync(key, options);
+    console.log(`🔐 SecureStore 조회 결과 - Key: ${key}, 있음: ${!!result}, 길이: ${result?.length || 0}`);
+    return result;
+  } catch (error) {
+    console.log(`❌ SecureStore 조회 실패 - Key: ${key}, Error:`, error);
+    throw error;
+  }
 }
 export async function deleteSecureItem(key: string) {
   await SecureStore.deleteItemAsync(key, { keychainService: 'app.secure' });
