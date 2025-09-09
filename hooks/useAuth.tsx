@@ -180,7 +180,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               {
                 name: checkResult.data.userEmail,
                 email: checkResult.data.userEmail
-              }
+              },
+              checkResult.data.expiresAt
             );
           } else {
             // 액세스 토큰이 만료된 경우 리프레시 시도
@@ -211,7 +212,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 {
                   name: userData.name,
                   email: userData.email
-                }
+                },
+                refreshResult.data.expiresAt
               );
             }
           }
@@ -347,11 +349,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               try {
                 webViewManager.broadcastSetTokens(
                   storedAccessToken, 
-                  deviceInfo.deviceId, 
+                  deviceId.deviceId, 
                   {
                     name: checkResult.data.userEmail,
                     email: checkResult.data.userEmail
-                  }
+                  },
+                  checkResult.data.expiresAt
                 );
                 console.log('📤 웹에 RN_SET_TOKENS 메시지 전송 완료');
               } catch (error) {
@@ -390,7 +393,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                       {
                         name: userData.name,
                         email: userData.id
-                      }
+                      },
+                      refreshResult.data.expiresAt
                     );
                     console.log('📤 웹에 새 RN_SET_TOKENS 메시지 전송 완료');
                   } catch (error) {
@@ -459,7 +463,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   {
                     name: userData.name,
                     email: userData.id
-                  }
+                  },
+                  refreshResult.data.expiresAt
                 );
                 console.log('📤 웹에 RN_SET_TOKENS 메시지 전송 완료');
               } catch (error) {
@@ -474,9 +479,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // FCM 초기화 (로그인 여부와 무관하게)
         try {
           await FCMService.initialize();
-          console.log('📱 FCM 초기화 완료');
         } catch (error) {
-          console.warn('FCM 초기화 실패 (무시됨):', error);
         }
 
         updateInitState('complete');

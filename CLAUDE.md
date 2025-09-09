@@ -14,6 +14,9 @@ This is a React Native mobile application built with Expo and Expo Router. It us
 - `npm run web` - Run web version
 - `npm run lint` - Run ESLint code linting
 - `npm run reset-project` - Reset to blank app (moves current app to app-example)
+- `npx tsc` - TypeScript compilation check
+- `npx expo prebuild` - Generate native directories for custom native modules
+- `npx expo install` - Install/update Expo SDK dependencies
 
 ## Android Development
 
@@ -91,6 +94,12 @@ For Android builds, use the Gradle wrapper in the android directory:
 - Image handling with expo-image and expo-image-picker
 - Media library access with expo-media-library
 
+## Environment Configuration
+
+- **API Base URL**: Set `EXPO_PUBLIC_API_BASE_URL` environment variable (defaults to `http://172.16.2.84:8080`)
+- **Mock Mode**: Toggle `MOCK_WEB_AUTHN = true` in `utils/api.ts` for development testing without server
+- **Firebase**: Requires `google-services.json` in project root for FCM push notifications
+
 ## Important Notes
 
 - New React Native architecture is enabled (`newArchEnabled: true`)
@@ -98,8 +107,6 @@ For Android builds, use the Gradle wrapper in the android directory:
 - Includes React Navigation for navigation management
 - FontAwesome icons and Expo Symbols are pre-configured
 - Splash screen and status bar are managed by Expo
-- API base URL configurable via `EXPO_PUBLIC_API_BASE_URL` environment variable
-- Mock mode available in api.ts for development testing
 - Uses cleartext traffic for Android development (`usesCleartextTraffic: true`)
 
 ## Testing

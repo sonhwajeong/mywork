@@ -31,9 +31,7 @@ export default function MyScreen() {
         try {
           const token = await messaging().getToken();
           setFcmToken(token);
-          console.log('📱 FCM 토큰 받아옴:', token);
         } catch (error) {
-          console.error('FCM 토큰 가져오기 실패:', error);
         }
       };
 

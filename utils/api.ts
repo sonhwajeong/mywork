@@ -470,10 +470,6 @@ export async function setupBiometricOnServer(payload: {
  */
 export async function sendFCMTokenToServer(fcmToken: string, accessToken?: string): Promise<{ success: boolean; message?: string }> {
   try {
-    console.log('📤 FCM 토큰을 서버에 전송 시작:', {
-      tokenLength: fcmToken.length,
-      hasAccessToken: !!accessToken
-    });
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
@@ -493,11 +489,6 @@ export async function sendFCMTokenToServer(fcmToken: string, accessToken?: strin
     });
 
     const responseText = await response.text();
-    console.log('FCM 토큰 전송 응답:', {
-      status: response.status,
-      statusText: response.statusText,
-      body: responseText
-    });
 
     if (!response.ok) {
       let errorMessage = 'FCM 토큰 전송에 실패했습니다.';
@@ -508,10 +499,6 @@ export async function sendFCMTokenToServer(fcmToken: string, accessToken?: strin
         errorMessage = responseText || errorMessage;
       }
       
-      console.error('FCM 토큰 전송 실패:', {
-        status: response.status,
-        message: errorMessage
-      });
       
       return {
         success: false,
@@ -531,7 +518,6 @@ export async function sendFCMTokenToServer(fcmToken: string, accessToken?: strin
       successResponse = { success: true, message: 'FCM 토큰이 성공적으로 전송되었습니다.' };
     }
 
-    console.log('✅ FCM 토큰 전송 성공:', successResponse);
     
     return {
       success: true,
@@ -539,7 +525,6 @@ export async function sendFCMTokenToServer(fcmToken: string, accessToken?: strin
     };
 
   } catch (error) {
-    console.error('❌ FCM 토큰 전송 중 네트워크 오류:', error);
     return {
       success: false,
       message: error instanceof Error ? error.message : 'FCM 토큰 전송 중 오류가 발생했습니다.'
